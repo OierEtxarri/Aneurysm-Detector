@@ -1,8 +1,10 @@
 # Script para entrenamiento de modelo predictivo de aneurisma cerebral
 
+
 import os
 import pandas as pd
 import numpy as np
+import cv2
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, classification_report
@@ -24,10 +26,40 @@ df = pd.merge(train_df, info_df, left_on='SeriesInstanceUID', right_on='ID')
 
 
 # Cargar imágenes y preparar X, y
+
+# DICOM tags to use as features
+DICOM_TAG_ALLOWLIST = [
+    'BitsAllocated', 'BitsStored', 'Columns', 'FrameOfReferenceUID', 'HighBit',
+    'ImageOrientationPatient', 'ImagePositionPatient', 'InstanceNumber', 'Modality',
+    'PatientID', 'PhotometricInterpretation', 'PixelRepresentation', 'PixelSpacing',
+    'PlanarConfiguration', 'RescaleIntercept', 'RescaleSlope', 'RescaleType', 'Rows',
+    'SOPClassUID', 'SOPInstanceUID', 'SamplesPerPixel', 'SliceThickness',
+    'SpacingBetweenSlices', 'StudyInstanceUID', 'TransferSyntaxUID'
+]
+
+import pydicom
+
+def preprocess_dicom_with_tags(dicom_path, img_size=(256, 256)):
+    ds = pydicom.dcmread(dicom_path)
+    img = ds.pixel_array.astype(np.float32)
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-6)
+    img_resized = cv2.resize(img, img_size)
+    img_flat = img_resized.flatten()
+    tag_features = []
+    for tag in DICOM_TAG_ALLOWLIST:
+        val = getattr(ds, tag, None)
+        if isinstance(val, (list, tuple)):
+            val = val[0] if len(val) > 0 else 0
+        if val is None:
+            val = 0
+        elif isinstance(val, str):
+            val = hash(val) % 10000
+        tag_features.append(float(val))
+    return np.concatenate([img_flat, np.array(tag_features)])
+
 X = []
 for img_path in df['img_path']:
-    img = np.load(img_path)
-    X.append(img.flatten())
+    X.append(preprocess_dicom_with_tags(img_path))
 X = np.array(X)
 
 
