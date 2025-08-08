@@ -42,20 +42,37 @@ LABEL_COLS = [
 def load_dicom_volume(series_uid, target_shape=(64, 128, 128)):
     series_path = os.path.join(SERIES_DIR, str(series_uid))
     if not os.path.exists(series_path):
-        return None
+        return np.zeros(target_shape, dtype=np.float32)
     dicom_files = [f for f in os.listdir(series_path) if f.endswith('.dcm')]
     if not dicom_files:
-        return None
+        return np.zeros(target_shape, dtype=np.float32)
     dicom_files.sort()
     slices = []
     for f in dicom_files:
         dcm = pydicom.dcmread(os.path.join(series_path, f))
         img = dcm.pixel_array.astype(np.float32)
+        # Forzar a 2D
+        if img.ndim == 1:
+            img = np.expand_dims(img, axis=0)
+        elif img.ndim > 2:
+            img = img.squeeze()
+        if img.ndim != 2:
+            continue  # descarta imágenes corruptas
         img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-6)
         slices.append(img)
-    volume = np.stack(slices, axis=0)
-    # Resize to target_shape
-    volume = resize_volume(volume, target_shape)
+    if len(slices) == 0:
+        return np.zeros(target_shape, dtype=np.float32)
+    try:
+        volume = np.stack(slices, axis=0)
+    except Exception:
+        return np.zeros(target_shape, dtype=np.float32)
+    if volume.ndim == 2:
+        volume = np.expand_dims(volume, axis=0)
+    if volume.ndim != 3:
+        return np.zeros(target_shape, dtype=np.float32)
+    from scipy.ndimage import zoom
+    factors = [t/s for t, s in zip(target_shape, volume.shape)]
+    volume = zoom(volume, factors, order=1)
     return volume
 
 def resize_volume(vol, target_shape):
