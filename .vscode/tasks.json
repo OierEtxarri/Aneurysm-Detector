@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Entrenar modelos aneurisma",
+			"command": "python3 scripts/train_model.py",
+			"group": "build",
+			"problemMatcher": []
+		}
+	]
+}
